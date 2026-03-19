@@ -1,0 +1,13 @@
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteBase /
+
+    # 1. SEND /api/... TO LARAVEL
+    RewriteCond %{REQUEST_URI} ^/api/
+    RewriteRule ^ api/public/index.php [L]
+
+    # 2. REACT FRONTEND HANDLING
+    RewriteCond %{REQUEST_FILENAME} !-f
+    RewriteCond %{REQUEST_FILENAME} !-d
+    RewriteRule ^ index.html [L]
+</IfModule>
