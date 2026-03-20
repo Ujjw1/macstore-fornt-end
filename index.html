@@ -25,5 +25,295 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Make desktop nav dropdown open on hover (instead of click only).
+      // The existing UI already has click handlers that set the active menu state;
+      // we simply trigger those handlers on hover.
+      window.addEventListener("load", function () {
+    setTimeout(function () {
+      var panel = document.getElementById("chatbot-panel");
+      if (panel && panel.style.display !== "block") {
+        panel.style.display = "block";
+      }
+    }, 3000); // 3 sec delay
+  });
+      window.addEventListener("load", () => {
+        const navCandidates = Array.from(document.querySelectorAll("nav")).filter(
+          (n) => n.className.includes("bg-white") && n.className.includes("lg:block")
+        );
+
+        const wrappers = navCandidates.flatMap((n) =>
+          Array.from(n.querySelectorAll("div.relative.group"))
+        );
+
+        // Dropdown panel rendered by the existing UI when activeDropdown matches the nav id.
+        const menuSelector = "div.absolute.left-0.top-full";
+
+        // Some nav items navigate immediately on click in your legacy code.
+        const exclude = new Set(["services", "offers", "blogs", "new launch", "shops"]);
+        const normalize = (s) => (s || "").trim().toLowerCase().replace(/\s+/g, " ");
+
+        const timers = new WeakMap();
+
+        function isVisible(el) {
+          if (!el) return false;
+          const style = window.getComputedStyle(el);
+          if (
+            style.display === "none" ||
+            style.visibility === "hidden" ||
+            style.opacity === "0" ||
+            parseFloat(style.opacity || "1") <= 0.01
+          )
+            return false;
+          // getClientRects can still report a box even when opacity is 0,
+          // so we combine it with the opacity/visibility checks above.
+          const rects = el.getClientRects();
+          return rects.length > 0 && rects.some((r) => r.width > 0 && r.height > 0);
+        }
+
+        wrappers.forEach((wrapper) => {
+          if (wrapper.dataset.hoverBound === "1") return;
+
+          const labeledSpans = Array.from(wrapper.querySelectorAll("span")).filter(
+            (s) => normalize(s.textContent).length > 0
+          );
+          if (labeledSpans.length === 0) return;
+
+          // Pick the first span that looks like a nav label (non-icon text) and is not excluded.
+          const clickTarget =
+            labeledSpans.find((s) => !exclude.has(normalize(s.textContent))) ||
+            labeledSpans[0];
+
+          if (!clickTarget) return;
+
+          wrapper.dataset.hoverBound = "1";
+
+          wrapper.addEventListener("mouseenter", () => {
+            const prev = timers.get(wrapper);
+            if (prev) window.clearTimeout(prev);
+            timers.delete(wrapper);
+
+            // Only click when submenu is not already present/open.
+            const menuEl = wrapper.querySelector(menuSelector);
+            if (isVisible(menuEl)) return;
+
+            clickTarget.click();
+            window.setTimeout(() => {
+              const openedEl = wrapper.querySelector(menuSelector);
+              if (isVisible(openedEl)) wrapper.dataset.hoverOpen = "1";
+            }, 80);
+          });
+
+          wrapper.addEventListener("mouseleave", () => {
+            const prev = timers.get(wrapper);
+            if (prev) window.clearTimeout(prev);
+
+            const t = window.setTimeout(() => {
+              if (
+                wrapper.dataset.hoverOpen === "1" &&
+                isVisible(wrapper.querySelector(menuSelector))
+              ) {
+                clickTarget.click();
+              }
+              wrapper.dataset.hoverOpen = "0";
+            }, 200);
+
+            timers.set(wrapper, t);
+          });
+        });
+      });
+    </script>
+    <button
+    id="chatbot-fab"
+    aria-label="Chatbot"
+    title="Chatbot"
+    style="
+      position:fixed;
+      right:20px;
+      bottom:20px;
+      z-index:999999;
+      width:60px;
+      height:60px;
+      background:#2563eb;
+      color:#fff;
+      border:none;
+      border-radius:50%;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      font-size:22px;
+      box-shadow:0 10px 30px rgba(0,0,0,.25);
+      cursor:pointer;
+    "
+  >
+    💬
+  </button>
+    <div
+    id="chatbot-panel"
+    style="position:fixed;right:20px;bottom:74px;z-index:999999;width:420px;max-width:calc(100vw - 20px);background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 25px 70px rgba(0,0,0,.2);display:none;overflow:hidden;"
+  >
+      <div style="background:#111827;color:#fff;padding:12px 14px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;">
+        <span>MacStore Chat</span>
+        <button id="chatbot-close" type="button" aria-label="Close" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1;">&times;</button>
+      </div>
+      <div id="chatbot-messages" style="height:400px;padding:14px 16px;overflow:auto;background:#f9fafb;"></div>
+      <div style="padding:12px 14px;border-top:1px solid rgba(0,0,0,.06);display:flex;gap:8px;align-items:center;background:#fff;">
+        <input
+          id="chatbot-input"
+          type="text"
+          placeholder="Type a message..."
+          style="flex:1;border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;"
+        />
+        <button id="chatbot-send" type="button" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;">Send</button>
+      </div>
+    </div>
+    <script>
+      (function () {
+        var fab = document.getElementById("chatbot-fab");
+        var panel = document.getElementById("chatbot-panel");
+        var closeBtn = document.getElementById("chatbot-close");
+        var messages = document.getElementById("chatbot-messages");
+        var input = document.getElementById("chatbot-input");
+        var sendBtn = document.getElementById("chatbot-send");
+
+        if (!fab || !panel || !messages || !input || !sendBtn) return;
+
+        function escapeHtml(str) {
+          return String(str)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+        }
+
+        function addMessage(text, role) {
+          var wrap = document.createElement("div");
+          wrap.style.marginBottom = "10px";
+          var align = role === "user" ? "flex-end" : "flex-start";
+          var bg =
+            role === "user" ? "rgba(37,99,235,.12)" : "rgba(17,24,39,.08)";
+          var color = role === "user" ? "#1d4ed8" : "#111827";
+          var border = role === "user" ? "rgba(37,99,235,.25)" : "rgba(17,24,39,.12)";
+          wrap.style.display = "flex";
+          wrap.style.justifyContent = align;
+          wrap.innerHTML =
+            '<div style="max-width:95%;background:' +
+            bg +
+            ";color:" +
+            color +
+            ";border:1px solid " +
+            border +
+            ";border-radius:12px;padding:10px 12px;font-size:14px;word-wrap:break-word;\">" +
+            escapeHtml(text) +
+            "</div>";
+          messages.appendChild(wrap);
+          messages.scrollTop = messages.scrollHeight;
+          return wrap;
+        }
+
+        function getUserId() {
+          var existing = null;
+          try {
+            existing = localStorage.getItem("chatbot-userId");
+          } catch (e) {}
+          if (existing) return existing;
+          var generated =
+            "user_" + Math.random().toString(16).slice(2) + Date.now();
+          try {
+            localStorage.setItem("chatbot-userId", generated);
+          } catch (e) {}
+          return generated;
+        }
+
+        function openPanel() {
+          panel.style.display = "block";
+          window.setTimeout(function () {
+            input.focus();
+          }, 50);
+        }
+
+        function closePanel() {
+          panel.style.display = "none";
+        }
+
+        fab.addEventListener("click", function () {
+          // Toggle open
+          if (panel.style.display === "block") closePanel();
+          else openPanel();
+        });
+
+        if (closeBtn) {
+          closeBtn.addEventListener("click", function () {
+            closePanel();
+          });
+        }
+
+        function send() {
+          var text = (input.value || "").trim();
+          if (!text) return;
+
+          addMessage(text, "user");
+          input.value = "";
+
+          var placeholder = addMessage("Typing...", "bot");
+          sendBtn.disabled = true;
+          input.disabled = true;
+
+          var userId = getUserId();
+          var payload = { userId: userId, message: text };
+
+          var apiUrl = "/api/chat";
+
+          fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          })
+            .then(function (r) {
+              return r.text().then(function (t) {
+                var data = null;
+                try {
+                  data = t ? JSON.parse(t) : null;
+                } catch (e) {
+                  data = null;
+                }
+                return { ok: r.ok, status: r.status, data: data };
+              });
+            })
+            .then(function (result) {
+              var data = result && result.data;
+              var reply =
+                result && result.ok && data && data.success
+                  ? data.reply
+                  : (data && data.error) ||
+                    "AI server error (HTTP " + result.status + ")";
+
+              var inner = placeholder.querySelector("div");
+              if (inner) inner.textContent = reply;
+            })
+            .catch(function () {
+              var inner = placeholder.querySelector("div");
+              if (inner) inner.textContent = "AI server not responding";
+            })
+            .finally(function () {
+              sendBtn.disabled = false;
+              input.disabled = false;
+              input.focus();
+            });
+        }
+
+        sendBtn.addEventListener("click", send);
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") send();
+        });
+
+        // Initial greeting
+        addMessage(
+          "Hi! How can I help you today?",
+          "bot"
+        );
+      })();
+    </script>
   </body>
 </html>

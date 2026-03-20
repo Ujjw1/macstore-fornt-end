@@ -3,13 +3,22 @@
   "version": "1.0.0",
   "description": "Static site - MacStore Nepal",
   "scripts": {
-    "start": "serve -s . -l 3000",
+    "start": "node server.js",
     "serve": "serve -s . -l 3000"
   },
   "devDependencies": {
-    "serve": "^14.2.4"
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "serve": "^14.2.4",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "all": "^0.0.0"
+    "@tanstack/react-query": "^5.91.2",
+    "all": "^0.0.0",
+    "axios": "^1.13.6",
+    "express": "^5.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.1"
   }
 }
