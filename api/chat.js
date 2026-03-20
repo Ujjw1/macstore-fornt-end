@@ -44,6 +44,7 @@ Hard rules:
 - Suggest exactly 2 options max.
 - No extra paragraphs. Use this format only:
   Option 1: <product> - <reason>. Option 2: <product> - <reason>. Then: <one question>.
+- Product comparison: If the user asks to compare/choose between two products (compare, between, vs, “which is better”), still output exactly 2 options in the same format, and make each `<reason>` clearly highlight the key difference vs the other (focus on camera, performance, battery, portability, etc.). Do NOT mention exact prices.
 - Use Nepali Rupees (NPR). If the user mentions budget in USD ($), convert approximately (1 USD ~= 135 NPR) and refer only to NPR (do not show the $ value).
 - Never invent future/unavailable models (example: "iPhone 17"). If asked, say we only recommend from available lineup and ask budget/usage.
 - Never include exact prices or price ranges. If price/availability/discount is requested, follow the name+contact template above.
@@ -125,6 +126,133 @@ async function getStorePolicyContext(userMessage) {
   return parts.join("\n\n");
 }
 
+function isEmiRequest(text) {
+  var t = String(text || "").toLowerCase();
+  return (
+    t.indexOf("emi") !== -1 ||
+    t.indexOf("installment") !== -1 ||
+    t.indexOf("installments") !== -1 ||
+    t.indexOf("monthly payment") !== -1 ||
+    (t.indexOf("monthly") !== -1 && t.indexOf("emi") !== -1)
+  );
+}
+
+function parseTenureMonths(text) {
+  var t = String(text || "").toLowerCase();
+  var m =
+    t.match(/(\d{1,2})\s*(months?|mo)\b/) ||
+    t.match(/(\d{1,2})\s*(years?|yr)\b/);
+
+  if (!m) {
+    // Common shorthand like "12 month"
+    m = t.match(/\bemi\s*(\d{1,3})\b/);
+  }
+
+  if (!m) return null;
+
+  var n = parseInt(m[1], 10);
+  if (isNaN(n)) return null;
+
+  // If the match came from years, convert to months.
+  if (t.indexOf("year") !== -1 || t.indexOf("yr") !== -1) return n * 12;
+  return n;
+}
+
+function extractNprNumber(text) {
+  var t = String(text || "");
+
+  // If it's already a plain number like "38500.00"
+  var direct = t.trim().match(/^([0-9][0-9,]*)(?:\.[0-9]+)?$/);
+  if (direct) {
+    var rawDirect = String(direct[1]).replace(/,/g, "");
+    var directN = parseInt(rawDirect, 10);
+    return isNaN(directN) ? null : directN;
+  }
+
+  // Try NPR / Rs formats first.
+  var m = t.match(/NPR\s*([0-9][0-9,]{2,})/i) || t.match(/Rs\.?\s*([0-9][0-9,]{2,})/i);
+  if (!m) m = t.match(/([0-9][0-9,]{2,})\s*(NPR|Rs)\b/i);
+  if (!m) return null;
+
+  var raw = m[1] || m[0];
+  raw = String(raw).replace(/,/g, "");
+  var n = parseInt(raw, 10);
+  return isNaN(n) ? null : n;
+}
+
+function formatNpr(n) {
+  try {
+    if (typeof n !== "number") return String(n);
+    return n.toLocaleString("en-US");
+  } catch {
+    return String(n);
+  }
+}
+
+async function fetchProductPriceFromSlug(slug) {
+  if (!slug) return null;
+  // Fetch from your existing backend product API (more reliable than scraping SPA HTML).
+  var productApiBase = (process.env.PRODUCT_API_BASE || "https://admin.macstore.com.np/api").replace(/\/+$/g, "");
+  var url = productApiBase + "/products/" + encodeURIComponent(slug);
+
+  var controller = new AbortController();
+  var timeout = setTimeout(function () {
+    try {
+      controller.abort();
+    } catch (e) {}
+  }, 8000);
+
+  try {
+    var r = await fetch(url, { method: "GET", signal: controller.signal });
+    if (!r.ok) return null;
+    var data = await r.json().catch(function () {
+      return null;
+    });
+    var product = data && typeof data === "object" ? data.product : null;
+    if (!product && Array.isArray(data)) product = data[0] || null;
+    if (!product) return null;
+
+    return extractNprNumber(product.price);
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getEmiContext(userMessage, page) {
+  if (!isEmiRequest(userMessage)) return null;
+
+  if (!page || page.type !== "product" || !page.slug) {
+    return {
+      reply:
+        "To calculate EMI, please open a product page and ask EMI for that product (or tell me the product price in NPR + tenure months).",
+    };
+  }
+
+  var tenureMonths = parseTenureMonths(userMessage) || 12;
+  var principal = await fetchProductPriceFromSlug(page.slug);
+
+  if (!principal) {
+    return {
+      reply:
+        "EMI calculation: please share the product price (NPR) and tenure (e.g., 12 months).",
+    };
+  }
+
+  var monthly = Math.round(principal / tenureMonths);
+  return {
+    reply:
+      "EMI estimate for " +
+      page.name +
+      " (approx, no-interest, using listed price). " +
+      tenureMonths +
+      " months: Monthly ~ NPR " +
+      formatNpr(monthly) +
+      ". Want a different tenure (6/12/18/24 months)?",
+  };
+}
+
 function stripContactIfNotRequested(userMessage, reply) {
   const m = String(userMessage || "").toLowerCase();
   const keywords = [
@@ -152,6 +280,8 @@ function stripContactIfNotRequested(userMessage, reply) {
   cleaned = cleaned.replace(/latest price[^.?!\n]*[.?!]?/gi, "");
   cleaned = cleaned.replace(/latest price and offers[^.?!\n]*[.?!]?/gi, "");
   cleaned = cleaned.replace(/offers[^.?!\n]*[.?!]?/gi, "");
+  // Keep EMI-related wording even if it includes "price".
+  // We only strip contact/name/offers patterns above; the line-level filter below should not remove "price".
 
   // Drop any line that still contains strong contact markers.
   cleaned = cleaned
@@ -176,6 +306,7 @@ module.exports = async function handler(req, res) {
     const userId = req.body && req.body.userId ? String(req.body.userId) : null;
     const message = req.body && req.body.message ? String(req.body.message) : null;
     const model = req.body && req.body.model ? String(req.body.model) : null;
+    const page = req.body && req.body.page ? req.body.page : null;
 
     if (!userId || !message) {
       return res.status(400).json({
@@ -196,6 +327,16 @@ module.exports = async function handler(req, res) {
 
     const storePolicyContext = await getStorePolicyContext(message);
 
+    const pageContext =
+      page && page.type === "product" && page.name
+        ? `User is viewing product page: ${page.name}. Focus recommendations on related variants/accessories of this product family.`
+        : "";
+
+    const emiContext = await getEmiContext(message, page);
+    if (emiContext && emiContext.reply) {
+      return res.status(200).json({ success: true, reply: emiContext.reply });
+    }
+
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -214,6 +355,7 @@ module.exports = async function handler(req, res) {
               "\n\nProduct links should use this base URL:\n" +
               siteBaseUrl +
               "\n(Use paths like /productview/...; do not invent slugs.)" +
+              (pageContext ? "\n\n" + pageContext : "") +
               (storePolicyContext ? "\n\nStore policy excerpts:\n" + storePolicyContext : ""),
           },
           {

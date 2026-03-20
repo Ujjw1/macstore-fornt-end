@@ -190,6 +190,72 @@
             .replace(/'/g, "&#039;");
         }
 
+        function linkifyText(text) {
+          var s = String(text || "");
+          var origin = (window.location && window.location.origin) ? window.location.origin : "";
+
+          // Match:
+          // - full URLs (https://...)
+          // - absolute product URLs without protocol (example.com/productview/...)
+          // - internal product paths (/productview/...)
+          // - internal product paths without leading slash (productview/...)
+          var urlRegex =
+            /(https?:\/\/[^\s<>"']+)|((?:[a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}\/productview\/[^\s<>"']+)|(\/productview\/[^\s<>"']+)|(productview\/[^\s<>"']+)/g;
+          var normalize = function (u) {
+            // Strip common trailing punctuation.
+            var url = String(u).replace(/[)\].,!?;:]+$/g, "");
+            if (url.indexOf("productview/") === 0) {
+              url = "/" + url;
+            }
+
+            // If it's a domain-based product URL without protocol, add https://
+            if (
+              url.indexOf("http://") !== 0 &&
+              url.indexOf("https://") !== 0 &&
+              url.indexOf("/productview/") !== 0
+            ) {
+              // expected format: example.com/productview/slug
+              if (/^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\/productview\//.test(url)) {
+                url = "https://" + url;
+              }
+            }
+
+            return url;
+          };
+
+          var out = "";
+          var lastIndex = 0;
+          var match;
+
+          while ((match = urlRegex.exec(s)) !== null) {
+            var start = match.index;
+            var end = urlRegex.lastIndex;
+            var before = s.slice(lastIndex, start);
+            out += escapeHtml(before);
+
+            var rawUrl = match[1] || match[2] || match[3] || match[4] || "";
+            var url = normalize(rawUrl);
+            var href = url;
+            var display = url;
+
+            if (String(url).indexOf("/productview/") === 0) {
+              href = origin + url;
+            }
+
+            out +=
+              '<a href="' +
+              escapeHtml(href) +
+              '" target="_blank" rel="noreferrer" style="color:#2563eb;text-decoration:underline;">' +
+              escapeHtml(display) +
+              "</a>";
+
+            lastIndex = end;
+          }
+
+          out += escapeHtml(s.slice(lastIndex));
+          return out;
+        }
+
         function addMessage(text, role) {
           var wrap = document.createElement("div");
           wrap.style.marginBottom = "10px";
@@ -208,7 +274,7 @@
             ";border:1px solid " +
             border +
             ";border-radius:12px;padding:10px 12px;font-size:14px;word-wrap:break-word;\">" +
-            escapeHtml(text) +
+            linkifyText(text) +
             "</div>";
           messages.appendChild(wrap);
           messages.scrollTop = messages.scrollHeight;
@@ -262,6 +328,73 @@
           });
         }
 
+        function getPageGreeting() {
+          var path = "";
+          try {
+            path = window.location && window.location.pathname ? window.location.pathname : "";
+          } catch (e) {
+            path = "";
+          }
+
+          var lowerPath = String(path).toLowerCase();
+          var defaultGreeting =
+            "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?";
+
+          // Product pages look like: /productview/<product-slug>
+          if (lowerPath.indexOf("/productview/") !== -1) {
+            var slug = path.split("/productview/")[1] || "";
+            slug = slug.split("/")[0] || "";
+            slug = slug.split("?")[0] || "";
+            slug = decodeURIComponent(slug);
+
+            var pretty = String(slug).replace(/-/g, " ").trim();
+            if (!pretty) pretty = "this product";
+            pretty = pretty.charAt(0).toUpperCase() + pretty.slice(1);
+
+            return (
+              "Hi! I’m ScriptAI from MacStore Nepal. You’re viewing " +
+              pretty +
+              ". Want a recommendation based on your budget and usage?"
+            );
+          }
+
+          return defaultGreeting;
+        }
+
+        function getPageContext() {
+          var path = "";
+          try {
+            path = window.location && window.location.pathname ? window.location.pathname : "";
+          } catch (e) {
+            path = "";
+          }
+
+          var lowerPath = String(path).toLowerCase();
+
+          // Product pages look like: /productview/<product-slug>
+          if (lowerPath.indexOf("/productview/") !== -1) {
+            var slug = path.split("/productview/")[1] || "";
+            slug = slug.split("/")[0] || "";
+            slug = slug.split("?")[0] || "";
+            slug = decodeURIComponent(slug);
+
+            var pretty = String(slug).replace(/-/g, " ").trim();
+            if (!pretty) pretty = "this product";
+            pretty = pretty.charAt(0).toUpperCase() + pretty.slice(1);
+
+            return {
+              type: "product",
+              slug: slug,
+              name: pretty,
+            };
+          }
+
+          return {
+            type: "page",
+            path: path,
+          };
+        }
+
         function send() {
           var text = (input.value || "").trim();
           if (!text) return;
@@ -273,7 +406,7 @@
           var lower = String(text).toLowerCase();
           if (lower === "hi" || lower === "hello" || lower === "hey") {
             addMessage(
-              "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?",
+              getPageGreeting(),
               "bot"
             );
             input.focus();
@@ -285,46 +418,172 @@
           input.disabled = true;
 
           var userId = getUserId();
-          var payload = { userId: userId, message: text };
+          var payload = { userId: userId, message: text, page: getPageContext() };
 
           var apiUrl = getChatApiUrl();
 
-          fetch(apiUrl, {
+          var streamUrl = apiUrl + "/stream";
+          var inner = placeholder.querySelector("div");
+          var userMessage = text;
+
+          function wantsContact(userText) {
+            var t = String(userText || "").toLowerCase();
+            var keys = [
+              "price",
+              "cost",
+              "available",
+              "discount",
+              "offer",
+              "warranty",
+              "delivery",
+              "shipping",
+              "return",
+              "refund",
+              "exchange",
+            ];
+            return keys.some(function (k) {
+              return t.indexOf(k) !== -1;
+            });
+          }
+
+          function cleanReplyForNoContact(userText, replyText) {
+            if (wantsContact(userText)) return String(replyText || "");
+            var cleaned = String(replyText || "");
+            cleaned = cleaned.replace(/Please share[^.?!\n]*\n?/gi, "");
+            cleaned = cleaned.replace(/share your name and contact[^.?!\n]*[.?!]?/gi, "");
+            cleaned = cleaned.replace(/name and contact[^.?!\n]*[.?!]?/gi, "");
+            cleaned = cleaned.replace(/latest price[^.?!\n]*[.?!]?/gi, "");
+            cleaned = cleaned.replace(/latest price and offers[^.?!\n]*[.?!]?/gi, "");
+            cleaned = cleaned.replace(/offers[^.?!\n]*[.?!]?/gi, "");
+            cleaned = cleaned
+              .split("\n")
+              .filter(function (line) {
+                return !/contact|name|latest price|offers/i.test(String(line || ""));
+              })
+              .join("\n")
+              .trim();
+            return cleaned || String(replyText || "");
+          }
+
+          function streamToText(response) {
+            return new Promise(function (resolve, reject) {
+              if (!response || !response.body || !response.body.getReader) {
+                reject(new Error("No streaming body"));
+                return;
+              }
+
+              var reader = response.body.getReader();
+              var decoder = new TextDecoder();
+              var fullText = "";
+              var buffer = "";
+
+              function pump() {
+                reader
+                  .read()
+                  .then(function (chunk) {
+                    if (!chunk) {
+                      resolve(fullText);
+                      return;
+                    }
+                    if (chunk.done) {
+                      resolve(fullText);
+                      return;
+                    }
+
+                    buffer += decoder.decode(chunk.value, { stream: true });
+                    var lines = buffer.split("\n");
+                    buffer = lines.pop();
+
+                    lines.forEach(function (line) {
+                      line = String(line || "").trim();
+                      if (!line.startsWith("data:")) return;
+                      var dataStr = line.slice(5).trim();
+                      if (!dataStr || dataStr === "[DONE]") return;
+
+                      try {
+                        var json = JSON.parse(dataStr);
+                        var choice = json && json.choices && json.choices[0];
+                        var token =
+                          choice &&
+                          choice.delta &&
+                          choice.delta.content
+                            ? choice.delta.content
+                            : "";
+
+                        if (token) {
+                          fullText += token;
+                          if (inner) inner.innerHTML = linkifyText(fullText);
+                        }
+                      } catch (e) {}
+                    });
+
+                    pump();
+                  })
+                  .catch(reject);
+              }
+
+              pump();
+            });
+          }
+
+          function tryJson() {
+            return fetch(apiUrl, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(payload),
+            })
+              .then(function (r) {
+                return r.text().then(function (t) {
+                  var data = null;
+                  try {
+                    data = t ? JSON.parse(t) : null;
+                  } catch (e) {
+                    data = null;
+                  }
+                  return { ok: r.ok, status: r.status, data: data };
+                });
+              })
+              .then(function (result) {
+                var data = result && result.data;
+                var reply;
+                if (result && result.ok && data && data.success) {
+                  reply = data.reply;
+                } else if (data && data.error) {
+                  reply = data.error;
+                } else if (result && result.status === 404) {
+                  reply =
+                    "Chat API not found (404). Your live site is static: deploy Node (server.js) or set <meta name=\"macstore-chat-api\" content=\"https://YOUR-API-HOST/api/chat\"> and enable CORS on the API.";
+                } else {
+                  reply = "AI server error (HTTP " + (result && result.status) + ")";
+                }
+
+                if (inner)
+                  inner.innerHTML = linkifyText(
+                    cleanReplyForNoContact(userMessage, reply)
+                  );
+              });
+          }
+
+          fetch(streamUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           })
             .then(function (r) {
-              return r.text().then(function (t) {
-                var data = null;
-                try {
-                  data = t ? JSON.parse(t) : null;
-                } catch (e) {
-                  data = null;
-                }
-                return { ok: r.ok, status: r.status, data: data };
-              });
+              if (!r.ok) throw new Error("Stream http " + r.status);
+              return streamToText(r);
             })
-            .then(function (result) {
-              var data = result && result.data;
-              var reply;
-              if (result && result.ok && data && data.success) {
-                reply = data.reply;
-              } else if (data && data.error) {
-                reply = data.error;
-              } else if (result && result.status === 404) {
-                reply =
-                  "Chat API not found (404). Your live site is static: deploy Node (server.js) or set <meta name=\"macstore-chat-api\" content=\"https://YOUR-API-HOST/api/chat\"> and enable CORS on the API.";
-              } else {
-                reply = "AI server error (HTTP " + (result && result.status) + ")";
-              }
-
-              var inner = placeholder.querySelector("div");
-              if (inner) inner.textContent = reply;
+            .then(function (fullText) {
+              if (inner)
+                inner.innerHTML = linkifyText(
+                  cleanReplyForNoContact(userMessage, fullText)
+                );
             })
             .catch(function () {
-              var inner = placeholder.querySelector("div");
-              if (inner) inner.textContent = "AI server not responding";
+              // Fallback to non-stream response
+              return tryJson().catch(function () {
+                if (inner) inner.textContent = "AI server not responding";
+              });
             })
             .finally(function () {
               sendBtn.disabled = false;
@@ -340,7 +599,7 @@
 
         // Initial greeting
         addMessage(
-          "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?",
+          getPageGreeting(),
           "bot"
         );
       })();
