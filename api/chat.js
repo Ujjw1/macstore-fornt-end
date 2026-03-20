@@ -71,13 +71,13 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const groqApiKey = process.env.GROQ_API_KEY;
+    const groqApiKey = (process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok);
     const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
     if (!groqApiKey) {
       return res.status(500).json({
         success: false,
-        error: "Missing GROQ_API_KEY in Vercel environment variables",
+        error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in Vercel environment variables",
       });
     }
 

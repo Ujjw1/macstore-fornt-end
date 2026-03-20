@@ -83,13 +83,13 @@ app.use(express.json({ limit: "1mb" }));
 
 // Simple connectivity check for Groq API setup.
 app.get("/api/health", async (_req, res) => {
-  const hasApiKey = Boolean(process.env.GROQ_API_KEY);
+  const hasApiKey = Boolean((process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok));
   try {
     if (!hasApiKey) {
       return res.status(500).json({
         ok: false,
         ai: "unconfigured",
-        error: "Missing GROQ_API_KEY",
+        error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok)",
       });
     }
     return res.json({
@@ -123,13 +123,13 @@ app.post("/api/chat", async (req, res) => {
     return;
   }
 
-  const groqApiKey = process.env.GROQ_API_KEY;
+  const groqApiKey = (process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok);
   const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
   if (!groqApiKey) {
     res.status(500).json({
       success: false,
-      error: "Missing GROQ_API_KEY in environment",
+      error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in environment",
     });
     return;
   }
