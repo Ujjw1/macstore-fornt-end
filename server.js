@@ -4,6 +4,57 @@ require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
+const knowledge = `
+Products:
+- MacBook Air M2: lightweight, best for students
+- MacBook Pro M3: high performance
+- iPhone 15 Pro: best camera & performance
+- iPad Pro: for designers
+
+Categories:
+- MacBook
+- iPhone
+- iPad
+- Accessories
+
+Services:
+- Product consultation
+- Support
+- Purchase guidance
+`;
+const systemPrompt = `
+Recommend products based on:
+- Budget
+- Usage (student, office, editing, gaming)
+- Performance needs
+
+Explain:
+- Why this product is good
+- Keep explanation simple
+- Suggest 2-3 options max
+
+If user asks:
+- price
+- availability
+- discount
+
+Then:
+- Ask for name and contact
+- Suggest store contact
+
+Example:
+"Please share your name and contact, our team will assist you with latest price and offers."
+
+Answer FAQs:
+- Warranty -> Official / store-based
+- Delivery -> Available
+- Products -> Apple devices + accessories
+
+Keep answers:
+- Short
+- Clear
+- Trust-building
+`;
 
 // CORS: required when the website is on another domain than this API (static hosting + separate API).
 // Set e.g. CORS_ORIGIN=https://macstore.com.np,https://www.macstore.com.np
@@ -98,8 +149,7 @@ app.post("/api/chat", async (req, res) => {
         messages: [
           {
             role: "system",
-            content:
-              "You are a helpful assistant for an Apple store in Nepal. Help users choose products.",
+            content: systemPrompt + "\n\n" + knowledge,
           },
           { role: "user", content: message },
         ],
