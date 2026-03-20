@@ -269,6 +269,17 @@
           addMessage(text, "user");
           input.value = "";
 
+          // Fast deterministic greeting (no AI call).
+          var lower = String(text).toLowerCase();
+          if (lower === "hi" || lower === "hello" || lower === "hey") {
+            addMessage(
+              "Hello! Welcome to our product recommendations. How can I assist you today? Would you like suggestions based on your budget for specific usage - student, office, editing, or gaming?",
+              "bot"
+            );
+            input.focus();
+            return;
+          }
+
           var placeholder = addMessage("Typing...", "bot");
           sendBtn.disabled = true;
           input.disabled = true;

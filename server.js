@@ -56,6 +56,11 @@ Keep answers:
 - Trust-building
 
 When the user asks about warranty, delivery/shipping, or return/refund, use the store policy excerpts provided by the system.
+
+Hard rules:
+- Keep every response short (max ~70 words) and suggest only 2-3 options.
+- Never invent future/unavailable models (example: "iPhone 17"). If asked, say you only recommend from your available lineup and ask budget/usage.
+- Never include exact prices or price ranges. If price/availability/discount is requested, follow the name+contact template above.
 `;
 
 const siteBaseUrl = process.env.SITE_BASE_URL || "https://macstore.com.np";
