@@ -352,14 +352,6 @@ app.post("/api/chat", async (req, res) => {
   const groqApiKey = (process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok);
   const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
-  if (!groqApiKey) {
-    res.status(500).json({
-      success: false,
-      error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in environment",
-    });
-    return;
-  }
-
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
@@ -374,6 +366,15 @@ app.post("/api/chat", async (req, res) => {
     const emiContext = await getEmiContext(message, page);
     if (emiContext && emiContext.reply) {
       return res.status(200).json({ success: true, reply: emiContext.reply });
+    }
+
+    if (!groqApiKey) {
+      res.status(200).json({
+        success: true,
+        reply:
+          "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
+      });
+      return;
     }
 
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -467,14 +468,6 @@ app.post("/api/chat/stream", async (req, res) => {
   const groqApiKey = (process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok);
   const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
 
-  if (!groqApiKey) {
-    res.status(500).json({
-      success: false,
-      error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in environment",
-    });
-    return;
-  }
-
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 25000);
@@ -492,6 +485,28 @@ app.post("/api/chat/stream", async (req, res) => {
       res.write("data: " + JSON.stringify(payload) + "\n\n");
       res.write("data: [DONE]\n\n");
       clearTimeout(timeout);
+      res.end();
+      return;
+    }
+
+    if (!groqApiKey) {
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders && res.flushHeaders();
+
+      var payload = {
+        choices: [
+          {
+            delta: {
+              content:
+                "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
+            },
+          },
+        ],
+      };
+      res.write("data: " + JSON.stringify(payload) + "\n\n");
+      res.write("data: [DONE]\n\n");
       res.end();
       return;
     }

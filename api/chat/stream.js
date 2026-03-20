@@ -182,17 +182,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const groqApiKey =
-      process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok;
-    if (!groqApiKey) {
-      return res.status(500).json({
-        success: false,
-        error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in environment",
-      });
-    }
-
-    const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-
     const pageContext =
       page && page.type === "product" && page.name
         ? `User is viewing product page: ${page.name}. Focus recommendations on related variants/accessories of this product family.`
@@ -207,6 +196,32 @@ module.exports = async function handler(req, res) {
 
       var payload = {
         choices: [{ delta: { content: emiContext.reply } }],
+      };
+      res.write("data: " + JSON.stringify(payload) + "\n\n");
+      res.write("data: [DONE]\n\n");
+      res.end();
+      return;
+    }
+
+    const groqApiKey =
+      process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok;
+    const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+    if (!groqApiKey) {
+      // Keep frontend streaming parser happy by returning a valid SSE message.
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders && res.flushHeaders();
+
+      var payload = {
+        choices: [
+          {
+            delta: {
+              content:
+                "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
+            },
+          },
+        ],
       };
       res.write("data: " + JSON.stringify(payload) + "\n\n");
       res.write("data: [DONE]\n\n");

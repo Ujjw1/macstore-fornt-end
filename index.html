@@ -16,6 +16,8 @@
     <!-- Chatbot: on static/live hosting, set this to your Node API full URL, e.g. https://your-api.onrender.com/api/chat -->
     <!-- Leave empty when the same server serves this site and POST /api/chat (npm start / node server.js). -->
     <meta name="macstore-chat-api" content="" />
+    <!-- WhatsApp bot (floating button). Set to something like 97798XXXXXXXX. Leave empty to hide button. -->
+    <meta name="macstore-whatsapp" content="9807233585" />
     <title>MacStore Nepal</title>
     <meta property="og:type" content="Ecommerce Website" />
     <meta property="og:url" content='https://macstore.com.np' />
@@ -151,6 +153,34 @@
   >
     💬
   </button>
+    <a
+      id="whatsapp-fab"
+      aria-label="WhatsApp"
+      title="WhatsApp"
+      target="_blank"
+      rel="noreferrer"
+      href="#"
+      style="
+        position:fixed;
+        right:90px;
+        bottom:20px;
+        z-index:999999;
+        width:60px;
+        height:60px;
+        background:#22c55e;
+        color:#fff;
+        border:none;
+        border-radius:50%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-size:24px;
+        box-shadow:0 10px 30px rgba(0,0,0,.25);
+        text-decoration:none;
+      "
+    >
+      <i class="fa-brands fa-whatsapp" style="font-size:26px;line-height:1;"></i>
+    </a>
     <div
     id="chatbot-panel"
     style="position:fixed;right:20px;bottom:74px;z-index:999999;width:420px;max-width:calc(100vw - 20px);background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 25px 70px rgba(0,0,0,.2);display:none;overflow:hidden;"
@@ -173,6 +203,7 @@
     <script>
       (function () {
         var fab = document.getElementById("chatbot-fab");
+        var whatsappFab = document.getElementById("whatsapp-fab");
         var panel = document.getElementById("chatbot-panel");
         var closeBtn = document.getElementById("chatbot-close");
         var messages = document.getElementById("chatbot-messages");
@@ -180,6 +211,24 @@
         var sendBtn = document.getElementById("chatbot-send");
 
         if (!fab || !panel || !messages || !input || !sendBtn) return;
+
+        // WhatsApp button config (hide if phone is not set).
+        if (whatsappFab) {
+          var waMeta = document.querySelector('meta[name="macstore-whatsapp"]');
+          var waNumber = (waMeta && waMeta.getAttribute("content")) ? String(waMeta.getAttribute("content")).trim() : "";
+
+          // Accept digits with optional leading +; WhatsApp wa.me expects country+number without "+".
+          waNumber = waNumber.replace(/^\+/, "");
+
+          if (!waNumber) {
+            whatsappFab.style.display = "none";
+          } else {
+            var waText = encodeURIComponent(
+              "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR ___ and usage is ___."
+            );
+            whatsappFab.setAttribute("href", "https://wa.me/" + waNumber + "?text=" + waText);
+          }
+        }
 
         function escapeHtml(str) {
           return String(str)

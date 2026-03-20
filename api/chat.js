@@ -315,16 +315,6 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const groqApiKey = (process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok);
-    const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
-
-    if (!groqApiKey) {
-      return res.status(500).json({
-        success: false,
-        error: "Missing GROQ_API_KEY (or GROK_API_KEY/grok) in Vercel environment variables",
-      });
-    }
-
     const storePolicyContext = await getStorePolicyContext(message);
 
     const pageContext =
@@ -335,6 +325,16 @@ module.exports = async function handler(req, res) {
     const emiContext = await getEmiContext(message, page);
     if (emiContext && emiContext.reply) {
       return res.status(200).json({ success: true, reply: emiContext.reply });
+    }
+
+    const groqApiKey = process.env.GROQ_API_KEY || process.env.GROK_API_KEY || process.env.grok;
+    const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+    if (!groqApiKey) {
+      return res.status(200).json({
+        success: true,
+        reply:
+          "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
+      });
     }
 
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
