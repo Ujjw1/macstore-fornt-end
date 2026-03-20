@@ -1,14 +1,41 @@
 const path = require("path");
 const express = require("express");
+require("dotenv").config();
 
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
 app.use(express.json({ limit: "1mb" }));
 
+// Simple connectivity check for Groq API setup.
+app.get("/api/health", async (_req, res) => {
+  const hasApiKey = Boolean(process.env.GROQ_API_KEY);
+  try {
+    if (!hasApiKey) {
+      return res.status(500).json({
+        ok: false,
+        ai: "unconfigured",
+        error: "Missing GROQ_API_KEY",
+      });
+    }
+    return res.json({
+      ok: true,
+      ai: "groq-configured",
+      model: process.env.GROQ_MODEL || "llama-3.1-8b-instant",
+      timestamp: new Date().toISOString(),
+    });
+  } catch (e) {
+    return res.status(502).json({
+      ok: false,
+      ai: "error",
+      error: e && e.message ? e.message : String(e),
+    });
+  }
+});
+
 // POST /api/chat
 // Expects: { userId: string, message: string, model?: string }
-// Calls local Ollama-compatible server: http://localhost:11434/api
+// Calls Groq chat completions API.
 app.post("/api/chat", async (req, res) => {
   const userId = req.body && req.body.userId ? String(req.body.userId) : null;
   const message = req.body && req.body.message ? String(req.body.message) : null;
@@ -22,19 +49,42 @@ app.post("/api/chat", async (req, res) => {
     return;
   }
 
-  const ollamaApiBase = process.env.OLLAMA_API_BASE || "http://localhost:11434/api";
-  const ollamaModel = model || process.env.OLLAMA_MODEL || "deepseek-r1";
+  const groqApiKey = process.env.GROQ_API_KEY;
+  const groqModel = model || process.env.GROQ_MODEL || "llama-3.1-8b-instant";
+
+  if (!groqApiKey) {
+    res.status(500).json({
+      success: false,
+      error: "Missing GROQ_API_KEY in environment",
+    });
+    return;
+  }
 
   try {
-    const r = await fetch(`${ollamaApiBase}/chat`, {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 25000);
+
+    const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bearer ${groqApiKey}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
-        model: ollamaModel,
-        messages: [{ role: "user", content: message }],
+        model: groqModel,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a helpful assistant for an Apple store in Nepal. Help users choose products.",
+          },
+          { role: "user", content: message },
+        ],
         stream: false,
       }),
+      signal: controller.signal,
     });
+    clearTimeout(timeout);
 
     const text = await r.text();
 
@@ -55,7 +105,7 @@ app.post("/api/chat", async (req, res) => {
     if (!r.ok) {
       res.status(r.status).json({
         success: false,
-        error: data?.error || `Ollama error (HTTP ${r.status})`,
+        error: data?.error?.message || data?.error || `Groq error (HTTP ${r.status})`,
       });
       return;
     }
@@ -70,9 +120,10 @@ app.post("/api/chat", async (req, res) => {
 
     res.json({ success: true, reply });
   } catch (e) {
+    const msg = e && e.message ? e.message : String(e);
     res.status(502).json({
       success: false,
-      error: "Ollama server not responding",
+      error: `AI server error: ${msg}`,
     });
   }
 });
