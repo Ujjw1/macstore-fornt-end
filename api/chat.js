@@ -390,9 +390,11 @@ module.exports = async function handler(req, res) {
       reply: finalReply,
     });
   } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: "AI server error",
+    // Graceful fallback so UI never shows HTTP 500.
+    return res.status(200).json({
+      success: true,
+      reply:
+        "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
     });
   }
 };

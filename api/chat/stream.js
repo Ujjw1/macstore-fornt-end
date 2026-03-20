@@ -278,8 +278,26 @@ module.exports = async function handler(req, res) {
 
     res.end();
   } catch (e) {
+    // Return a valid SSE payload so the frontend never shows HTTP 500.
     try {
-      res.status(500).json({ success: false, error: "AI server error" });
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders && res.flushHeaders();
+
+      var payload = {
+        choices: [
+          {
+            delta: {
+              content:
+                "I can’t connect to AI right now. Please tell your budget (NPR) and usage (student/office/editing/gaming), and which product you want (iPhone/MacBook/iPad/accessories).",
+            },
+          },
+        ],
+      };
+      res.write("data: " + JSON.stringify(payload) + "\n\n");
+      res.write("data: [DONE]\n\n");
+      res.end();
     } catch {}
   }
 };
