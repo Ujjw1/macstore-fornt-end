@@ -5,6 +5,29 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT ? Number(process.env.PORT) : 3000;
 
+// CORS: required when the website is on another domain than this API (static hosting + separate API).
+// Set e.g. CORS_ORIGIN=https://macstore.com.np,https://www.macstore.com.np
+// Or CORS_ORIGIN=* for any origin (ok for this public chat endpoint; avoid if you add cookies later).
+app.use((req, res, next) => {
+  const raw = process.env.CORS_ORIGIN;
+  if (raw) {
+    const list = raw.split(",").map((s) => s.trim()).filter(Boolean);
+    const reqOrigin = req.headers.origin;
+    if (list.includes("*")) {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+    } else if (reqOrigin && list.includes(reqOrigin)) {
+      res.setHeader("Access-Control-Allow-Origin", reqOrigin);
+      res.setHeader("Vary", "Origin");
+    }
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  }
+  if (req.method === "OPTIONS") {
+    return res.status(204).end();
+  }
+  next();
+});
+
 app.use(express.json({ limit: "1mb" }));
 
 // Simple connectivity check for Groq API setup.

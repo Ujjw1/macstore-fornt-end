@@ -13,6 +13,9 @@
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Chatbot: on static/live hosting, set this to your Node API full URL, e.g. https://your-api.onrender.com/api/chat -->
+    <!-- Leave empty when the same server serves this site and POST /api/chat (npm start / node server.js). -->
+    <meta name="macstore-chat-api" content="" />
     <title>MacStore Nepal</title>
     <meta property="og:type" content="Ecommerce Website" />
     <meta property="og:url" content="https://macstore.com.np" />
@@ -212,6 +215,16 @@
           return wrap;
         }
 
+        function getChatApiUrl() {
+          if (typeof window !== "undefined" && window.__CHATBOT_API_URL__) {
+            return String(window.__CHATBOT_API_URL__).trim();
+          }
+          var m = document.querySelector('meta[name="macstore-chat-api"]');
+          var v = m && m.getAttribute("content");
+          if (v && String(v).trim()) return String(v).trim();
+          return "/api/chat";
+        }
+
         function getUserId() {
           var existing = null;
           try {
@@ -263,7 +276,7 @@
           var userId = getUserId();
           var payload = { userId: userId, message: text };
 
-          var apiUrl = "/api/chat";
+          var apiUrl = getChatApiUrl();
 
           fetch(apiUrl, {
             method: "POST",
@@ -283,11 +296,17 @@
             })
             .then(function (result) {
               var data = result && result.data;
-              var reply =
-                result && result.ok && data && data.success
-                  ? data.reply
-                  : (data && data.error) ||
-                    "AI server error (HTTP " + result.status + ")";
+              var reply;
+              if (result && result.ok && data && data.success) {
+                reply = data.reply;
+              } else if (data && data.error) {
+                reply = data.error;
+              } else if (result && result.status === 404) {
+                reply =
+                  "Chat API not found (404). Your live site is static: deploy Node (server.js) or set <meta name=\"macstore-chat-api\" content=\"https://YOUR-API-HOST/api/chat\"> and enable CORS on the API.";
+              } else {
+                reply = "AI server error (HTTP " + (result && result.status) + ")";
+              }
 
               var inner = placeholder.querySelector("div");
               if (inner) inner.textContent = reply;
