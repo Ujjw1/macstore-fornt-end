@@ -211,6 +211,9 @@ module.exports = async function handler(req, res) {
               systemPrompt +
               "\n\n" +
               knowledge +
+              "\n\nProduct links should use this base URL:\n" +
+              siteBaseUrl +
+              "\n(Use paths like /productview/...; do not invent slugs.)" +
               (storePolicyContext ? "\n\nStore policy excerpts:\n" + storePolicyContext : ""),
           },
           {
