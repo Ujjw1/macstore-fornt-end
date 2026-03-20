@@ -25,19 +25,7 @@ Recommend products based on:
 Explain:
 - Why this product is good
 - Keep explanation simple
-- Suggest 2-3 options max
-
-If user asks:
-- price
-- availability
-- discount
-
-Then:
-- Ask for name and contact
-- Suggest store contact
-
-Example:
-"Please share your name and contact, our team will assist you with latest price and offers."
+- Suggest 2 options max
 
 Answer FAQs:
 - Warranty -> Official / store-based
@@ -52,10 +40,14 @@ Keep answers:
 When the user asks about warranty, delivery/shipping, or return/refund, use the store policy excerpts provided by the system.
 
 Hard rules:
-- Keep every response short (max ~70 words) and suggest only 2-3 options.
+- Keep every response short (max ~35 words).
+- Suggest exactly 2 options max.
+- No extra paragraphs. Use this format only:
+  Option 1: <product> - <reason>. Option 2: <product> - <reason>. Then: <one question>.
 - Use Nepali Rupees (NPR). If the user mentions budget in USD ($), convert approximately (1 USD ~= 135 NPR) and refer only to NPR (do not show the $ value).
 - Never invent future/unavailable models (example: "iPhone 17"). If asked, say we only recommend from available lineup and ask budget/usage.
 - Never include exact prices or price ranges. If price/availability/discount is requested, follow the name+contact template above.
+- Ask for name+contact ONLY when the user message contains at least one of these keywords: price, cost, available, discount, offer, warranty, delivery, shipping, return, refund, exchange. Otherwise do not ask for contact and do not mention "latest price/offers".
 `;
 
 const siteBaseUrl = process.env.SITE_BASE_URL || "https://macstore.com.np";
@@ -130,6 +122,44 @@ async function getStorePolicyContext(userMessage) {
   }
 
   return parts.join("\n\n");
+}
+
+function stripContactIfNotRequested(userMessage, reply) {
+  const m = String(userMessage || "").toLowerCase();
+  const keywords = [
+    "price",
+    "cost",
+    "available",
+    "discount",
+    "offer",
+    "warranty",
+    "delivery",
+    "shipping",
+    "return",
+    "refund",
+    "exchange",
+  ];
+  const wantsContact = keywords.some((k) => m.includes(k));
+  if (wantsContact) return reply;
+
+  let cleaned = String(reply || "");
+
+  // Remove the common contact/price-request phrasing.
+  cleaned = cleaned.replace(/Please share[^.?!\n]*\n?/gi, "");
+  cleaned = cleaned.replace(/share your name and contact[^.?!\n]*[.?!]?/gi, "");
+  cleaned = cleaned.replace(/name and contact[^.?!\n]*[.?!]?/gi, "");
+  cleaned = cleaned.replace(/latest price[^.?!\n]*[.?!]?/gi, "");
+  cleaned = cleaned.replace(/latest price and offers[^.?!\n]*[.?!]?/gi, "");
+  cleaned = cleaned.replace(/offers[^.?!\n]*[.?!]?/gi, "");
+
+  // Drop any line that still contains strong contact markers.
+  cleaned = cleaned
+    .split("\n")
+    .filter((line) => !/contact|name/i.test(line))
+    .join("\n")
+    .trim();
+
+  return cleaned || reply;
 }
 
 module.exports = async function handler(req, res) {
@@ -208,9 +238,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const finalReply = stripContactIfNotRequested(message, reply);
     return res.status(200).json({
       success: true,
-      reply,
+      reply: finalReply,
     });
   } catch (error) {
     return res.status(500).json({
