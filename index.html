@@ -156,7 +156,7 @@
     style="position:fixed;right:20px;bottom:74px;z-index:999999;width:420px;max-width:calc(100vw - 20px);background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 25px 70px rgba(0,0,0,.2);display:none;overflow:hidden;"
   >
       <div style="background:#111827;color:#fff;padding:12px 14px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;">
-        <span>MacStore Chat</span>
+        <span>ScriptAI - MacStore Nepal</span>
         <button id="chatbot-close" type="button" aria-label="Close" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1;">&times;</button>
       </div>
       <div id="chatbot-messages" style="height:400px;padding:14px 16px;overflow:auto;background:#f9fafb;"></div>
@@ -273,7 +273,7 @@
           var lower = String(text).toLowerCase();
           if (lower === "hi" || lower === "hello" || lower === "hey") {
             addMessage(
-              "Hello! Welcome to our product recommendations. How can I assist you today? Would you like suggestions based on your budget for specific usage - student, office, editing, or gaming?",
+              "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?",
               "bot"
             );
             input.focus();
@@ -340,7 +340,7 @@
 
         // Initial greeting
         addMessage(
-          "Hi! How can I help you today?",
+          "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?",
           "bot"
         );
       })();
