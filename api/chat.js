@@ -48,7 +48,83 @@ Keep answers:
 - Short
 - Clear
 - Trust-building
+
+When the user asks about warranty, delivery/shipping, or return/refund, use the store policy excerpts provided by the system.
 `;
+
+const siteBaseUrl = process.env.SITE_BASE_URL || "https://macstore.com.np";
+
+function extractPolicySentences(text) {
+  const keywords = [
+    "warranty",
+    "guarantee",
+    "delivery",
+    "shipping",
+    "ship",
+    "return",
+    "refund",
+    "exchange",
+    "replacement",
+    "policy",
+  ];
+  const sentences = String(text)
+    .split(/[.!?]\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .filter((s) => keywords.some((k) => s.toLowerCase().includes(k)));
+  return sentences.slice(0, 18).join(". ") + (sentences.length ? "." : "");
+}
+
+async function fetchAndExtract(pagePath) {
+  const url = `${siteBaseUrl}${pagePath}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  try {
+    const r = await fetch(url, {
+      method: "GET",
+      headers: { "User-Agent": "macstore-chatbot/1.0" },
+      signal: controller.signal,
+    });
+    if (!r.ok) return "";
+    let html = await r.text();
+    html = html.slice(0, 250000); // avoid huge pages
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return extractPolicySentences(text);
+  } catch {
+    return "";
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getStorePolicyContext(userMessage) {
+  const m = String(userMessage || "").toLowerCase();
+  const needsFaq = /(warranty|guarantee|faq|delivery|shipping|return|refund|exchange)/.test(m);
+  if (!needsFaq) return "";
+
+  const pagesToTry = [];
+
+  // Only these pages per your requirement.
+  // - FAQs (warranty/support/delivery related)
+  // - Shipping (delivery)
+  // - Return (refund/exchange)
+  pagesToTry.push("/faqs");
+  if (/(delivery|shipping|ship)/.test(m)) pagesToTry.push("/shipping");
+  if (/(return|refund|exchange)/.test(m)) pagesToTry.push("/return");
+
+  const parts = [];
+  for (const p of pagesToTry) {
+    const snippet = await fetchAndExtract(p);
+    if (snippet) parts.push(`${p}\n${snippet}`);
+  }
+
+  return parts.join("\n\n");
+}
 
 module.exports = async function handler(req, res) {
   if (req.method !== "POST") {
@@ -81,6 +157,8 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    const storePolicyContext = await getStorePolicyContext(message);
+
     const r = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -92,7 +170,11 @@ module.exports = async function handler(req, res) {
         messages: [
           {
             role: "system",
-            content: systemPrompt + "\n\n" + knowledge,
+            content:
+              systemPrompt +
+              "\n\n" +
+              knowledge +
+              (storePolicyContext ? "\n\nStore policy excerpts:\n" + storePolicyContext : ""),
           },
           {
             role: "user",
