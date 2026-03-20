@@ -181,6 +181,109 @@ function formatNpr(n) {
   }
 }
 
+function stripHtmlToText(html) {
+  var s = String(html || "");
+  s = s.replace(/<script[\s\S]*?<\/script>/gi, " ");
+  s = s.replace(/<style[\s\S]*?<\/style>/gi, " ");
+  s = s.replace(/<[^>]+>/g, " ");
+  s = s.replace(/&nbsp;/gi, " ");
+  s = s.replace(/&amp;/gi, "&");
+  s = s.replace(/\s+/g, " ").trim();
+  return s;
+}
+
+function isProductDetailRequest(text) {
+  var t = String(text || "").toLowerCase();
+  return (
+    t.indexOf("details") !== -1 ||
+    t.indexOf("detail") !== -1 ||
+    t.indexOf("spec") !== -1 ||
+    t.indexOf("specs") !== -1 ||
+    t.indexOf("features") !== -1 ||
+    t.indexOf("feature") !== -1 ||
+    t.indexOf("information") !== -1 ||
+    t.indexOf("tell me about") !== -1 ||
+    t.indexOf("how is") !== -1 ||
+    t.indexOf("advantages") !== -1
+  );
+}
+
+async function fetchProductDetailsFromSlug(slug) {
+  if (!slug) return null;
+  // Fetch from your existing backend product API (more reliable than scraping SPA HTML).
+  var productApiBase = (process.env.PRODUCT_API_BASE || "https://admin.macstore.com.np/api").replace(/\/+$/g, "");
+  var url = productApiBase + "/products/" + encodeURIComponent(slug);
+
+  var controller = new AbortController();
+  var timeout = setTimeout(function () {
+    try {
+      controller.abort();
+    } catch (e) {}
+  }, 8000);
+
+  try {
+    var r = await fetch(url, { method: "GET", signal: controller.signal });
+    if (!r.ok) return null;
+    var data = await r.json().catch(function () {
+      return null;
+    });
+    var product = data && typeof data === "object" ? data.product : null;
+    if (!product && Array.isArray(data)) product = data[0] || null;
+    if (!product) return null;
+
+    return {
+      name: product.name || slug,
+      description: product.description || "",
+      stock_status: product.stock_status || "",
+    };
+  } catch (e) {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getProductDetailContext(userMessage, page) {
+  if (!isProductDetailRequest(userMessage)) return null;
+
+  if (!page || page.type !== "product" || !page.slug) {
+    return {
+      reply:
+        "Please open a product page, then ask for details like specs/features. Example: “details for this product”.",
+    };
+  }
+
+  var product = await fetchProductDetailsFromSlug(page.slug);
+  if (!product) {
+    return {
+      reply:
+        "I couldn’t fetch this product’s details. Please try again from the product page.",
+    };
+  }
+
+  var text = stripHtmlToText(product.description);
+  var sentences = text
+    ? text
+        .split(/[.!?]\s+/)
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean)
+    : [];
+
+  var summary = sentences.slice(0, 2).join(". ");
+  if (!summary) summary = text.slice(0, 180);
+
+  return {
+    reply:
+      product.name +
+      ": " +
+      summary +
+      (summary ? "." : "") +
+      " Want specs for another product too?",
+  };
+}
+
 async function fetchProductPriceFromSlug(slug) {
   if (!slug) return null;
   // Fetch from your existing backend product API (more reliable than scraping SPA HTML).
@@ -368,6 +471,11 @@ app.post("/api/chat", async (req, res) => {
       return res.status(200).json({ success: true, reply: emiContext.reply });
     }
 
+    const detailContext = await getProductDetailContext(message, page);
+    if (detailContext && detailContext.reply) {
+      return res.status(200).json({ success: true, reply: detailContext.reply });
+    }
+
     if (!groqApiKey) {
       res.status(200).json({
         success: true,
@@ -481,6 +589,24 @@ app.post("/api/chat/stream", async (req, res) => {
 
       var payload = {
         choices: [{ delta: { content: emiContext.reply } }],
+      };
+      res.write("data: " + JSON.stringify(payload) + "\n\n");
+      res.write("data: [DONE]\n\n");
+      clearTimeout(timeout);
+      res.end();
+      return;
+    }
+
+    const detailContext = await getProductDetailContext(message, page);
+    if (detailContext && detailContext.reply) {
+      // Send one-shot SSE response compatible with the frontend parser.
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("Connection", "keep-alive");
+      res.flushHeaders && res.flushHeaders();
+
+      var payload = {
+        choices: [{ delta: { content: detailContext.reply } }],
       };
       res.write("data: " + JSON.stringify(payload) + "\n\n");
       res.write("data: [DONE]\n\n");
