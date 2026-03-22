@@ -27,6 +27,98 @@
     <meta property="og:site_name" content="MacStore Nepal" />
     <script type="module" crossorigin src="/assets/index-4M5TQbuE.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-cUCs3NRL.css">
+    <style id="chatbot-motion-styles">
+      #chatbot-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 999998;
+        background: rgba(12, 12, 16, 0.14);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+        transition: opacity 0.38s cubic-bezier(0.22, 1, 0.36, 1),
+          visibility 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #chatbot-backdrop.chatbot-backdrop--visible {
+        opacity: 1;
+        visibility: visible;
+        pointer-events: auto;
+      }
+      #chatbot-panel {
+        transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+          transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+        opacity: 0;
+        transform: translateY(14px);
+        pointer-events: none;
+      }
+      #chatbot-panel.chatbot-panel--open {
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+      #chatbot-fab {
+        transition: transform 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      #chatbot-fab.chatbot-fab--pop {
+        animation: chatbotFabPop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      @keyframes chatbotFabPop {
+        0% {
+          transform: scale(0.95);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+      @keyframes chatbotBubbleIn {
+        from {
+          opacity: 0;
+          transform: translateY(10px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .chatbot-msg-bubble {
+        animation: chatbotBubbleIn 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+        animation-delay: var(--chatbot-stagger, 0ms);
+      }
+      .chatbot-typing-dots {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 0;
+        min-height: 1.2em;
+      }
+      .chatbot-typing-dots span {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: rgba(17, 24, 39, 0.42);
+        animation: chatbotDotBounce 1.15s ease-in-out infinite;
+      }
+      .chatbot-typing-dots span:nth-child(2) {
+        animation-delay: 0.14s;
+      }
+      .chatbot-typing-dots span:nth-child(3) {
+        animation-delay: 0.28s;
+      }
+      @keyframes chatbotDotBounce {
+        0%,
+        55%,
+        100% {
+          transform: translateY(0);
+          opacity: 0.38;
+        }
+        28% {
+          transform: translateY(-5px);
+          opacity: 0.95;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
@@ -34,14 +126,6 @@
       // Make desktop nav dropdown open on hover (instead of click only).
       // The existing UI already has click handlers that set the active menu state;
       // we simply trigger those handlers on hover.
-      window.addEventListener("load", function () {
-    setTimeout(function () {
-      var panel = document.getElementById("chatbot-panel");
-      if (panel && panel.style.display !== "block") {
-        panel.style.display = "block";
-      }
-    }, 3000); // 3 sec delay
-  });
       window.addEventListener("load", () => {
         const navCandidates = Array.from(document.querySelectorAll("nav")).filter(
           (n) => n.className.includes("bg-white") && n.className.includes("lg:block")
@@ -128,6 +212,7 @@
         });
       });
     </script>
+    <div id="chatbot-backdrop" aria-hidden="true" style="display:none;"></div>
     <button
     id="chatbot-fab"
     aria-label="Chatbot"
@@ -211,6 +296,8 @@
         var sendBtn = document.getElementById("chatbot-send");
 
         if (!fab || !panel || !messages || !input || !sendBtn) return;
+        var backdrop = document.getElementById("chatbot-backdrop");
+
 
         // WhatsApp button config (hide if phone is not set).
         if (whatsappFab) {
@@ -307,6 +394,7 @@
 
         function addMessage(text, role) {
           var wrap = document.createElement("div");
+          wrap.className = "chatbot-msg-row";
           wrap.style.marginBottom = "10px";
           var align = role === "user" ? "flex-end" : "flex-start";
           var bg =
@@ -315,16 +403,42 @@
           var border = role === "user" ? "rgba(0,0,0,.2)" : "rgba(17,24,39,.12)";
           wrap.style.display = "flex";
           wrap.style.justifyContent = align;
-          wrap.innerHTML =
-            '<div style="max-width:95%;background:' +
+          var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
+          var stagger = Math.min(rowCount * 72, 360);
+          var bubble = document.createElement("div");
+          bubble.className = "chatbot-msg-bubble";
+          bubble.style.cssText =
+            "max-width:95%;background:" +
             bg +
             ";color:" +
             color +
             ";border:1px solid " +
             border +
-            ";border-radius:12px;padding:10px 12px;font-size:14px;word-wrap:break-word;\">" +
-            linkifyText(text) +
-            "</div>";
+            ";border-radius:12px;padding:10px 12px;font-size:14px;word-wrap:break-word;";
+          bubble.style.setProperty("--chatbot-stagger", stagger + "ms");
+          bubble.innerHTML = linkifyText(text);
+          wrap.appendChild(bubble);
+          messages.appendChild(wrap);
+          messages.scrollTop = messages.scrollHeight;
+          return wrap;
+        }
+
+        function addTypingIndicator() {
+          var wrap = document.createElement("div");
+          wrap.className = "chatbot-msg-row";
+          wrap.style.marginBottom = "10px";
+          wrap.style.display = "flex";
+          wrap.style.justifyContent = "flex-start";
+          var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
+          var stagger = Math.min(rowCount * 72, 360);
+          var bubble = document.createElement("div");
+          bubble.className = "chatbot-msg-bubble";
+          bubble.style.cssText =
+            "max-width:95%;background:rgba(17,24,39,.08);color:#111827;border:1px solid rgba(17,24,39,.12);border-radius:12px;padding:12px 16px;font-size:14px;";
+          bubble.style.setProperty("--chatbot-stagger", stagger + "ms");
+          bubble.innerHTML =
+            '<span class="chatbot-typing-dots" aria-label="Bot is typing"><span></span><span></span><span></span></span>';
+          wrap.appendChild(bubble);
           messages.appendChild(wrap);
           messages.scrollTop = messages.scrollHeight;
           return wrap;
@@ -354,22 +468,56 @@
           return generated;
         }
 
+        function finishClosePanel() {
+          panel.style.display = "none";
+          panel.classList.remove("chatbot-panel--open");
+          if (backdrop) {
+            backdrop.style.display = "none";
+            backdrop.classList.remove("chatbot-backdrop--visible");
+          }
+        }
+
+        function isPanelOpen() {
+          return panel.classList.contains("chatbot-panel--open");
+        }
+
         function openPanel() {
+          if (backdrop) {
+            backdrop.style.display = "block";
+          }
           panel.style.display = "block";
+          window.requestAnimationFrame(function () {
+            window.requestAnimationFrame(function () {
+              if (backdrop) backdrop.classList.add("chatbot-backdrop--visible");
+              panel.classList.add("chatbot-panel--open");
+            });
+          });
           window.setTimeout(function () {
             input.focus();
-          }, 50);
+          }, 120);
         }
 
         function closePanel() {
-          panel.style.display = "none";
+          if (backdrop) backdrop.classList.remove("chatbot-backdrop--visible");
+          panel.classList.remove("chatbot-panel--open");
+          window.setTimeout(function () {
+            finishClosePanel();
+          }, 420);
         }
 
         fab.addEventListener("click", function () {
-          // Toggle open
-          if (panel.style.display === "block") closePanel();
+          fab.classList.remove("chatbot-fab--pop");
+          void fab.offsetWidth;
+          fab.classList.add("chatbot-fab--pop");
+          if (isPanelOpen()) closePanel();
           else openPanel();
         });
+
+        if (backdrop) {
+          backdrop.addEventListener("click", function () {
+            closePanel();
+          });
+        }
 
         if (closeBtn) {
           closeBtn.addEventListener("click", function () {
@@ -462,7 +610,7 @@
             return;
           }
 
-          var placeholder = addMessage("Typing...", "bot");
+          var placeholder = addTypingIndicator();
           sendBtn.disabled = true;
           input.disabled = true;
 
@@ -651,6 +799,10 @@
           getPageGreeting(),
           "bot"
         );
+
+        window.setTimeout(function () {
+          if (!isPanelOpen()) openPanel();
+        }, 3000);
       })();
     </script>
   </body>
