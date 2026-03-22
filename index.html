@@ -404,7 +404,7 @@
           wrap.style.display = "flex";
           wrap.style.justifyContent = align;
           var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
-          var stagger = Math.min(rowCount * 72, 360);
+          var stagger = Math.min(rowCount * 80, 400);
           var bubble = document.createElement("div");
           bubble.className = "chatbot-msg-bubble";
           bubble.style.cssText =
@@ -430,7 +430,7 @@
           wrap.style.display = "flex";
           wrap.style.justifyContent = "flex-start";
           var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
-          var stagger = Math.min(rowCount * 72, 360);
+          var stagger = Math.min(rowCount * 80, 400);
           var bubble = document.createElement("div");
           bubble.className = "chatbot-msg-bubble";
           bubble.style.cssText =
@@ -442,6 +442,49 @@
           messages.appendChild(wrap);
           messages.scrollTop = messages.scrollHeight;
           return wrap;
+        }
+
+        var welcomeSequenceFinished = false;
+        var welcomeSequenceCtl = null;
+
+        function cancelWelcomeSequence() {
+          if (!welcomeSequenceCtl) return;
+          welcomeSequenceCtl.cancelled = true;
+          welcomeSequenceCtl.timers.forEach(function (id) {
+            window.clearTimeout(id);
+          });
+          if (welcomeSequenceCtl.typingRow && welcomeSequenceCtl.typingRow.parentNode) {
+            welcomeSequenceCtl.typingRow.remove();
+          }
+          welcomeSequenceCtl = null;
+        }
+
+        function startWelcomeSequenceIfNeeded() {
+          if (welcomeSequenceFinished) return;
+          if (welcomeSequenceCtl) return;
+          var ctl = { cancelled: false, timers: [], typingRow: null };
+          welcomeSequenceCtl = ctl;
+          ctl.typingRow = addTypingIndicator();
+          var typingMs = 950;
+          var t0 = window.setTimeout(function () {
+            if (ctl.cancelled || welcomeSequenceCtl !== ctl) return;
+            if (ctl.typingRow && ctl.typingRow.parentNode) ctl.typingRow.remove();
+            ctl.typingRow = null;
+            var parts = getPageGreetingParts();
+            var staggerMs = 80;
+            parts.forEach(function (part, i) {
+              var tid = window.setTimeout(function () {
+                if (ctl.cancelled || welcomeSequenceCtl !== ctl) return;
+                addMessage(part, "bot");
+                if (i === parts.length - 1) {
+                  welcomeSequenceFinished = true;
+                  welcomeSequenceCtl = null;
+                }
+              }, i * staggerMs);
+              ctl.timers.push(tid);
+            });
+          }, typingMs);
+          ctl.timers.push(t0);
         }
 
         function getChatApiUrl() {
@@ -490,6 +533,7 @@
             window.requestAnimationFrame(function () {
               if (backdrop) backdrop.classList.add("chatbot-backdrop--visible");
               panel.classList.add("chatbot-panel--open");
+              startWelcomeSequenceIfNeeded();
             });
           });
           window.setTimeout(function () {
@@ -498,6 +542,7 @@
         }
 
         function closePanel() {
+          cancelWelcomeSequence();
           if (backdrop) backdrop.classList.remove("chatbot-backdrop--visible");
           panel.classList.remove("chatbot-panel--open");
           window.setTimeout(function () {
@@ -525,7 +570,7 @@
           });
         }
 
-        function getPageGreeting() {
+        function getPageGreetingParts() {
           var path = "";
           try {
             path = window.location && window.location.pathname ? window.location.pathname : "";
@@ -534,8 +579,6 @@
           }
 
           var lowerPath = String(path).toLowerCase();
-          var defaultGreeting =
-            "Hi! I’m ScriptAI from MacStore Nepal. What’s your budget and usage (student, office, editing, or gaming)?";
 
           // Product pages look like: /productview/<product-slug>
           if (lowerPath.indexOf("/productview/") !== -1) {
@@ -548,14 +591,21 @@
             if (!pretty) pretty = "this product";
             pretty = pretty.charAt(0).toUpperCase() + pretty.slice(1);
 
-            return (
-              "Hi! I’m ScriptAI from MacStore Nepal. You’re viewing " +
-              pretty +
-              ". Want a recommendation based on your budget and usage?"
-            );
+            return [
+              "Hi! I’m ScriptAI from MacStore Nepal.",
+              "You’re viewing " + pretty + ".",
+              "Want a recommendation based on your budget and usage?",
+            ];
           }
 
-          return defaultGreeting;
+          return [
+            "Hi! I’m ScriptAI from MacStore Nepal.",
+            "What’s your budget and usage (student, office, editing, or gaming)?",
+          ];
+        }
+
+        function getPageGreeting() {
+          return getPageGreetingParts().join(" ");
         }
 
         function getPageContext() {
@@ -793,12 +843,6 @@
         input.addEventListener("keydown", function (e) {
           if (e.key === "Enter") send();
         });
-
-        // Initial greeting
-        addMessage(
-          getPageGreeting(),
-          "bot"
-        );
 
         window.setTimeout(function () {
           if (!isPanelOpen()) openPanel();
