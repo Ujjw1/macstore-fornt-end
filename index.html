@@ -118,6 +118,144 @@
           opacity: 0.95;
         }
       }
+
+      /* Chat transcript */
+      #chatbot-messages {
+        font-family: "Outfit", system-ui, -apple-system, sans-serif;
+        background: linear-gradient(180deg, #f4f4f5 0%, #ececf0 100%);
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+      }
+      #chatbot-messages::-webkit-scrollbar {
+        width: 6px;
+      }
+      #chatbot-messages::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.18);
+        border-radius: 6px;
+      }
+
+      .chatbot-msg-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+        margin-bottom: 14px;
+      }
+      .chatbot-msg-row--bot {
+        justify-content: flex-start;
+      }
+      .chatbot-msg-row--user {
+        justify-content: flex-end;
+      }
+
+      .chatbot-avatar {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        background: linear-gradient(145deg, #27272a 0%, #09090b 100%);
+        color: #fafafa;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 17px;
+        line-height: 1;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+      }
+
+      .chatbot-msg-stack {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 4px;
+        min-width: 0;
+        max-width: calc(100% - 46px);
+      }
+      .chatbot-msg-stack--user {
+        align-items: flex-end;
+        max-width: min(88%, 100%);
+      }
+
+      .chatbot-msg-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: #71717a;
+        padding: 0 2px;
+      }
+      .chatbot-msg-label--user {
+        color: #a1a1aa;
+      }
+
+      .chatbot-msg-bubble {
+        max-width: 100%;
+      }
+      .chatbot-msg-bubble--bot {
+        background: #fff;
+        color: #18181b;
+        border: 1px solid rgba(0, 0, 0, 0.06);
+        border-radius: 16px 16px 16px 6px;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+      }
+      .chatbot-msg-bubble--user {
+        background: linear-gradient(155deg, #18181b 0%, #0a0a0a 100%);
+        color: #fafafa;
+        border: 1px solid rgba(255, 255, 255, 0.06);
+        border-radius: 16px 16px 6px 16px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+      }
+      .chatbot-msg-bubble--typing {
+        border-radius: 16px 16px 16px 6px;
+      }
+
+      .chatbot-msg-body {
+        padding: 12px 14px;
+        font-size: 14px;
+        line-height: 1.55;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      .chatbot-msg-bubble--user .chatbot-msg-body {
+        color: #f4f4f5;
+      }
+
+      .chatbot-msg-link {
+        color: #2563eb;
+        font-weight: 500;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .chatbot-msg-link:hover {
+        color: #1d4ed8;
+      }
+      .chatbot-msg-bubble--user .chatbot-msg-link {
+        color: #93c5fd;
+      }
+      .chatbot-msg-bubble--user .chatbot-msg-link:hover {
+        color: #bfdbfe;
+      }
+
+      .chatbot-msg-body code {
+        font-size: 0.9em;
+        padding: 0.15em 0.4em;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.06);
+      }
+      .chatbot-msg-bubble--user .chatbot-msg-body code {
+        background: rgba(255, 255, 255, 0.1);
+      }
+
+      /* Stack consecutive bot bubbles (welcome / multi-part replies) */
+      .chatbot-msg-row--bot + .chatbot-msg-row--bot .chatbot-avatar {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .chatbot-msg-row--bot + .chatbot-msg-row--bot .chatbot-msg-label {
+        visibility: hidden;
+        height: 0;
+        margin: 0;
+        overflow: hidden;
+      }
     </style>
   </head>
   <body>
@@ -270,19 +408,19 @@
     id="chatbot-panel"
     style="position:fixed;right:20px;bottom:74px;z-index:999999;width:420px;max-width:calc(100vw - 20px);background:#fff;border:1px solid rgba(0,0,0,.08);border-radius:16px;box-shadow:0 25px 70px rgba(0,0,0,.2);display:none;overflow:hidden;"
   >
-      <div style="background:#000;color:#fff;padding:12px 14px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;">
-        <span>ScriptAI - MacStore Nepal</span>
-        <button id="chatbot-close" type="button" aria-label="Close" style="background:transparent;border:none;color:#fff;font-size:18px;cursor:pointer;line-height:1;">&times;</button>
+      <div style="background:linear-gradient(100deg,#0a0a0a 0%,#18181b 55%,#27272a 100%);color:#fff;padding:14px 16px;font-weight:700;font-size:14px;display:flex;align-items:center;justify-content:space-between;letter-spacing:0.02em;">
+        <span style="display:flex;align-items:center;gap:8px;"><span style="opacity:.85;font-weight:600;font-size:12px;">●</span> ScriptAI · MacStore Nepal</span>
+        <button id="chatbot-close" type="button" aria-label="Close" style="background:rgba(255,255,255,.08);border:none;color:#fff;font-size:20px;cursor:pointer;line-height:1;width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;">&times;</button>
       </div>
-      <div id="chatbot-messages" style="height:400px;padding:14px 16px;overflow:auto;background:#f9fafb;"></div>
-      <div style="padding:12px 14px;border-top:1px solid rgba(0,0,0,.06);display:flex;gap:8px;align-items:center;background:#fff;">
+      <div id="chatbot-messages" style="height:400px;padding:16px 14px;overflow:auto;"></div>
+      <div style="padding:12px 14px;border-top:1px solid rgba(0,0,0,.06);display:flex;gap:10px;align-items:center;background:#fafafa;">
         <input
           id="chatbot-input"
           type="text"
-          placeholder="Type a message..."
-          style="flex:1;border:1px solid rgba(0,0,0,.12);border-radius:10px;padding:10px 12px;font-size:14px;outline:none;"
+          placeholder="Ask about products, specs, or deals…"
+          style="flex:1;border:1px solid rgba(0,0,0,.1);border-radius:12px;padding:11px 14px;font-size:14px;outline:none;font-family:inherit;background:#fff;"
         />
-        <button id="chatbot-send" type="button" style="background:#000;color:#fff;border:none;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;">Send</button>
+        <button id="chatbot-send" type="button" style="background:#000;color:#fff;border:none;border-radius:12px;padding:11px 16px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 8px rgba(0,0,0,.12);">Send</button>
       </div>
     </div>
     <script>
@@ -379,9 +517,9 @@
             }
 
             out +=
-              '<a href="' +
+              '<a class="chatbot-msg-link" href="' +
               escapeHtml(href) +
-              '" target="_blank" rel="noreferrer" style="color:#000;text-decoration:underline;">' +
+              '" target="_blank" rel="noreferrer">' +
               escapeHtml(display) +
               "</a>";
 
@@ -389,35 +527,52 @@
           }
 
           out += escapeHtml(s.slice(lastIndex));
-          return out;
+          return out.replace(/\n/g, "<br>");
         }
 
         function addMessage(text, role) {
           var wrap = document.createElement("div");
-          wrap.className = "chatbot-msg-row";
-          wrap.style.marginBottom = "10px";
-          var align = role === "user" ? "flex-end" : "flex-start";
-          var bg =
-            role === "user" ? "rgba(0,0,0,.1)" : "rgba(17,24,39,.08)";
-          var color = role === "user" ? "#000" : "#111827";
-          var border = role === "user" ? "rgba(0,0,0,.2)" : "rgba(17,24,39,.12)";
-          wrap.style.display = "flex";
-          wrap.style.justifyContent = align;
+          wrap.className =
+            "chatbot-msg-row chatbot-msg-row--" + (role === "user" ? "user" : "bot");
           var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
           var stagger = Math.min(rowCount * 80, 400);
+
           var bubble = document.createElement("div");
-          bubble.className = "chatbot-msg-bubble";
-          bubble.style.cssText =
-            "max-width:95%;background:" +
-            bg +
-            ";color:" +
-            color +
-            ";border:1px solid " +
-            border +
-            ";border-radius:12px;padding:10px 12px;font-size:14px;word-wrap:break-word;";
+          bubble.className =
+            "chatbot-msg-bubble chatbot-msg-bubble--" +
+            (role === "user" ? "user" : "bot");
           bubble.style.setProperty("--chatbot-stagger", stagger + "ms");
-          bubble.innerHTML = linkifyText(text);
-          wrap.appendChild(bubble);
+
+          var body = document.createElement("div");
+          body.className = "chatbot-msg-body";
+          body.innerHTML = linkifyText(text);
+          bubble.appendChild(body);
+
+          if (role === "user") {
+            var stack = document.createElement("div");
+            stack.className = "chatbot-msg-stack chatbot-msg-stack--user";
+            var label = document.createElement("span");
+            label.className = "chatbot-msg-label chatbot-msg-label--user";
+            label.textContent = "You";
+            stack.appendChild(label);
+            stack.appendChild(bubble);
+            wrap.appendChild(stack);
+          } else {
+            var avatar = document.createElement("div");
+            avatar.className = "chatbot-avatar";
+            avatar.setAttribute("aria-hidden", "true");
+            avatar.textContent = "\uD83E\uDD16";
+            var stack = document.createElement("div");
+            stack.className = "chatbot-msg-stack";
+            var label = document.createElement("span");
+            label.className = "chatbot-msg-label";
+            label.textContent = "ScriptAI";
+            stack.appendChild(label);
+            stack.appendChild(bubble);
+            wrap.appendChild(avatar);
+            wrap.appendChild(stack);
+          }
+
           messages.appendChild(wrap);
           messages.scrollTop = messages.scrollHeight;
           return wrap;
@@ -425,20 +580,38 @@
 
         function addTypingIndicator() {
           var wrap = document.createElement("div");
-          wrap.className = "chatbot-msg-row";
-          wrap.style.marginBottom = "10px";
-          wrap.style.display = "flex";
-          wrap.style.justifyContent = "flex-start";
+          wrap.className = "chatbot-msg-row chatbot-msg-row--bot";
           var rowCount = messages.querySelectorAll(".chatbot-msg-row").length;
           var stagger = Math.min(rowCount * 80, 400);
+
+          var avatar = document.createElement("div");
+          avatar.className = "chatbot-avatar";
+          avatar.setAttribute("aria-hidden", "true");
+          avatar.textContent = "\uD83E\uDD16";
+
+          var stack = document.createElement("div");
+          stack.className = "chatbot-msg-stack";
+          var label = document.createElement("span");
+          label.className = "chatbot-msg-label";
+          label.textContent = "ScriptAI";
+
           var bubble = document.createElement("div");
-          bubble.className = "chatbot-msg-bubble";
-          bubble.style.cssText =
-            "max-width:95%;background:rgba(17,24,39,.08);color:#111827;border:1px solid rgba(17,24,39,.12);border-radius:12px;padding:12px 16px;font-size:14px;";
+          bubble.className =
+            "chatbot-msg-bubble chatbot-msg-bubble--bot chatbot-msg-bubble--typing";
           bubble.style.setProperty("--chatbot-stagger", stagger + "ms");
-          bubble.innerHTML =
+
+          var body = document.createElement("div");
+          body.className = "chatbot-msg-body";
+          body.style.padding = "14px 16px";
+          body.innerHTML =
             '<span class="chatbot-typing-dots" aria-label="Bot is typing"><span></span><span></span><span></span></span>';
-          wrap.appendChild(bubble);
+
+          bubble.appendChild(body);
+          stack.appendChild(label);
+          stack.appendChild(bubble);
+          wrap.appendChild(avatar);
+          wrap.appendChild(stack);
+
           messages.appendChild(wrap);
           messages.scrollTop = messages.scrollHeight;
           return wrap;
@@ -593,8 +766,6 @@
 
             return [
               "Hi! I’m ScriptAI from MacStore Nepal.",
-              "You’re viewing " + pretty + ".",
-              "Want a recommendation based on your budget and usage?",
             ];
           }
 
@@ -670,7 +841,7 @@
           var apiUrl = getChatApiUrl();
 
           var streamUrl = apiUrl + "/stream";
-          var inner = placeholder.querySelector("div");
+          var inner = placeholder.querySelector(".chatbot-msg-body");
           var userMessage = text;
 
           function wantsContact(userText) {
@@ -838,12 +1009,10 @@
               input.focus();
             });
         }
-
         sendBtn.addEventListener("click", send);
         input.addEventListener("keydown", function (e) {
           if (e.key === "Enter") send();
         });
-
         window.setTimeout(function () {
           if (!isPanelOpen()) openPanel();
         }, 3000);
