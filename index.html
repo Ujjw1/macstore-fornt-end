@@ -450,6 +450,7 @@
           } else {
             var PRODUCT_API = "https://admin.macstore.com.np/api";
             var waPathKey = "";
+            var waFetchInFlight = false;
 
             function getProductSlugFromPath() {
               try {
@@ -471,10 +472,38 @@
               return n.toLocaleString();
             }
 
+            function extractPriceFromDom() {
+              try {
+                var root = document.getElementById("root");
+                if (!root) return "";
+                var t = root.innerText || "";
+                var m = t.match(/NPR\s+([\d,]+(?:\.\d+)?)/);
+                if (!m || !m[1]) return "";
+                return formatListedPrice(m[1]);
+              } catch (e) {
+                return "";
+              }
+            }
+
             function defaultWaMessage() {
               return (
                 "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR ___ and usage is ___."
               );
+            }
+
+            function waHrefHasPlaceholder() {
+              try {
+                var h = whatsappFab.getAttribute("href") || "";
+                var q = h.indexOf("text=");
+                if (q === -1) return true;
+                var raw = h.slice(q + 5);
+                var amp = raw.indexOf("&");
+                if (amp !== -1) raw = raw.slice(0, amp);
+                var txt = decodeURIComponent(raw.replace(/\+/g, " "));
+                return /NPR\s+___/.test(txt);
+              } catch (e) {
+                return true;
+              }
             }
 
             function setWaHref(message) {
@@ -484,37 +513,76 @@
               );
             }
 
+            function applyProductPriceMessage(slug, listed) {
+              if (!listed) return;
+              if (getProductSlugFromPath() !== slug) return;
+              var msg =
+                "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR " +
+                listed +
+                " and usage is ___.";
+              setWaHref(msg);
+            }
+
+            function resolvePriceFromPayload(data) {
+              if (!data || typeof data !== "object") return "";
+              var p = data.product;
+              if (!p && data.data && data.data.product) p = data.data.product;
+              if (!p) return "";
+              var raw = p.price != null ? p.price : p.sale_price;
+              return formatListedPrice(raw);
+            }
+
+            function scheduleDomPriceFallback(slug) {
+              [400, 1200, 2500].forEach(function (ms) {
+                window.setTimeout(function () {
+                  if (getProductSlugFromPath() !== slug) return;
+                  if (!waHrefHasPlaceholder()) return;
+                  var domListed = extractPriceFromDom();
+                  if (domListed) applyProductPriceMessage(slug, domListed);
+                }, ms);
+              });
+            }
+
             function updateWhatsAppLink() {
               var slug = getProductSlugFromPath();
               if (!slug) {
                 waPathKey = "";
+                waFetchInFlight = false;
                 setWaHref(defaultWaMessage());
                 return;
               }
-              if (slug === waPathKey && whatsappFab.getAttribute("href") && whatsappFab.getAttribute("href").indexOf("wa.me/") !== -1) {
-                return;
+              if (slug !== waPathKey) {
+                waPathKey = slug;
+                waFetchInFlight = false;
+                setWaHref(defaultWaMessage());
               }
-              waPathKey = slug;
-              setWaHref(defaultWaMessage());
+              if (!waHrefHasPlaceholder()) return;
+              if (waFetchInFlight) return;
+              waFetchInFlight = true;
+              scheduleDomPriceFallback(slug);
               fetch(PRODUCT_API + "/products/" + encodeURIComponent(slug), {
                 headers: { Accept: "application/json" },
+                cache: "no-store",
               })
                 .then(function (r) {
                   return r.ok ? r.json() : null;
                 })
                 .then(function (data) {
-                  if (!data || !data.product) return;
-                  var price = data.product.price;
-                  var listed = formatListedPrice(price);
-                  if (!listed) return;
-                  if (getProductSlugFromPath() !== slug) return;
-                  var msg =
-                    "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR " +
-                    listed +
-                    " and usage is ___.";
-                  setWaHref(msg);
+                  var listed = resolvePriceFromPayload(data);
+                  if (!listed) {
+                    var domListed = extractPriceFromDom();
+                    if (domListed) applyProductPriceMessage(slug, domListed);
+                    return;
+                  }
+                  applyProductPriceMessage(slug, listed);
                 })
-                .catch(function () {});
+                .catch(function () {
+                  var domListed = extractPriceFromDom();
+                  if (domListed) applyProductPriceMessage(slug, domListed);
+                })
+                .finally(function () {
+                  waFetchInFlight = false;
+                });
             }
 
             updateWhatsAppLink();
