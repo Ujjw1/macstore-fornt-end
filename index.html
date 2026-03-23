@@ -448,10 +448,92 @@
           if (!waNumber) {
             whatsappFab.style.display = "none";
           } else {
-            var waText = encodeURIComponent(
-              "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR ___ and usage is ___."
-            );
-            whatsappFab.setAttribute("href", "https://wa.me/" + waNumber + "?text=" + waText);
+            var PRODUCT_API = "https://admin.macstore.com.np/api";
+            var waPathKey = "";
+
+            function getProductSlugFromPath() {
+              try {
+                var path = window.location && window.location.pathname ? window.location.pathname : "";
+                var lower = String(path).toLowerCase();
+                if (lower.indexOf("/productview/") === -1) return "";
+                var slug = path.split("/productview/")[1] || "";
+                slug = slug.split("/")[0] || "";
+                slug = slug.split("?")[0] || "";
+                return decodeURIComponent(slug).trim();
+              } catch (e) {
+                return "";
+              }
+            }
+
+            function formatListedPrice(priceRaw) {
+              var n = parseFloat(String(priceRaw || "").replace(/,/g, ""));
+              if (isNaN(n)) return "";
+              return n.toLocaleString();
+            }
+
+            function defaultWaMessage() {
+              return (
+                "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR ___ and usage is ___."
+              );
+            }
+
+            function setWaHref(message) {
+              whatsappFab.setAttribute(
+                "href",
+                "https://wa.me/" + waNumber + "?text=" + encodeURIComponent(message)
+              );
+            }
+
+            function updateWhatsAppLink() {
+              var slug = getProductSlugFromPath();
+              if (!slug) {
+                waPathKey = "";
+                setWaHref(defaultWaMessage());
+                return;
+              }
+              if (slug === waPathKey && whatsappFab.getAttribute("href") && whatsappFab.getAttribute("href").indexOf("wa.me/") !== -1) {
+                return;
+              }
+              waPathKey = slug;
+              setWaHref(defaultWaMessage());
+              fetch(PRODUCT_API + "/products/" + encodeURIComponent(slug), {
+                headers: { Accept: "application/json" },
+              })
+                .then(function (r) {
+                  return r.ok ? r.json() : null;
+                })
+                .then(function (data) {
+                  if (!data || !data.product) return;
+                  var price = data.product.price;
+                  var listed = formatListedPrice(price);
+                  if (!listed) return;
+                  if (getProductSlugFromPath() !== slug) return;
+                  var msg =
+                    "Hi MacStore Nepal! I need help choosing the right Apple product. My budget is NPR " +
+                    listed +
+                    " and usage is ___.";
+                  setWaHref(msg);
+                })
+                .catch(function () {});
+            }
+
+            updateWhatsAppLink();
+
+            (function () {
+              var _push = history.pushState;
+              var _replace = history.replaceState;
+              history.pushState = function () {
+                var ret = _push.apply(history, arguments);
+                updateWhatsAppLink();
+                return ret;
+              };
+              history.replaceState = function () {
+                var ret = _replace.apply(history, arguments);
+                updateWhatsAppLink();
+                return ret;
+              };
+              window.addEventListener("popstate", updateWhatsAppLink);
+            })();
           }
         }
 
